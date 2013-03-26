@@ -1,0 +1,360 @@
+#cython: embedsignature=True
+import  numpy as np
+cimport numpy as np
+
+cdef extern from "math.h":
+    cdef double log(double n)
+    cdef double log10(double n)
+    cdef double fmod(double a, double b)
+    cdef double modf(double x, double *integer)
+    cdef double pow(double x, double y)
+    
+cdef extern from "numpy/arrayobject.h":
+    PyArray_EMPTY(int nd, np.npy_intp* dims, int typenum, int fortran)
+    
+cdef inline np.ndarray EMPTY1D(int size): #new_empty_doublearray_1D(int size):
+    cdef np.npy_intp dims[1]
+    dims[0] = size
+    return PyArray_EMPTY(1, dims, DTYPE_TYPENUM, 0)
+
+DTYPE = np.float
+DTYPE_TYPENUM = np.NPY_DOUBLE
+
+cdef dict _notes2 = {
+    "C":0,
+    "c":0,
+    "D":2,
+    "d":2,
+    "E":4,
+    "e":4,
+    "F":5,
+    "f":5,
+    "G":7,
+    "g":7,
+    "A":9,
+    "a":9,
+    "B":11,
+    "b":11}
+
+cdef list _notes3      = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B", "C"]
+cdef list _enharmonics = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B", "C"]
+
+cdef double _a4 = 442.0
+cdef int _central_octave = 4
+
+DEF OCTAVE_NOT_FOUND = -99
+DEF loge_2 = 0.6931471805599453094172321214581766
+
+cpdef inline double m2f(double midi):
+    """
+    convert midi value to frequency (A4 = 69.0 = 442.0)
+    
+    by default A4 = 69 = 442 Hz. 
+    You can change the reference frequency (A4) by calling set_reference_freq
+
+    A4 * 2.0 ** ((midi - 69.0) / 12.0)   # where A4 is 440 or 442 depending on the desired intonation
+    """
+    global _a4
+    if 0.0 <= midi:
+        return _a4 * 2.0 ** ((midi - 69.0) / 12.0)
+    return 0.
+
+cpdef inline double f2m(double freq):
+    """
+    convert frequency to midinote (C4 is central C)
+    
+    by default A4 = 69 = 442 Hz. 
+    You can change the reference frequency (A4) by calling set_reference_freq
+
+    12 * (log(freq / A4) / loge_2) + 69.0   # where A4 corresponds to the intonation of A4 in Hz (440-442)
+    """
+    global _a4
+    if freq <= 0:
+        return 0
+    cdef double res
+    if freq < 8.2129616379875419:   # this is the corresponding freq to midi 0
+        return 0
+    return 12 * (log(freq / _a4) / loge_2) + 69.0
+
+def set_reference_freq(double a4=442.0):
+    """
+    set the value for A4
+    """
+    global _a4
+    _a4 = a4
+    
+def set_central_octave(int oct=4):
+    """
+    define which is the central octave taken as reference
+    
+    if oct = 4 then C4 = 60
+    if oct = 3 then C3 = 60
+    """
+    global _central_octave
+    _central_octave = oct
+    
+cpdef m2n(double midi):
+    """
+    convert midi value to note string (69.0 = 'A4')
+
+    format: 4C#+07
+
+    """
+    cdef double entero
+    cdef double micro = modf(midi, &entero)
+    cdef int octave = <int>(midi / 12.0) - 1
+    cdef int ps = <int>fmod(midi, 12.0)
+    cdef int cents = <int>(micro * 100 + 0.5)
+    if cents == 0:
+        return str(octave) + _notes3[ps]
+    elif cents == 50:
+        if ps == 1 or ps == 3 or ps == 6 or ps == 8 or ps == 10:
+            return str(octave) + _notes3[ps+1] + '-'
+        return str(octave) + _notes3[ps] + '+'
+    elif cents > 50:  # convert it to negative
+        cents = 100 - cents
+        ps += 1
+        if ps > 11:
+            octave += 1
+        if cents > 9:
+            return "%d%s-%d" % (octave, _enharmonics[ps], cents)
+        else:
+            return "%d%s-0%d" % (octave, _enharmonics[ps], cents)
+    else:
+        if cents > 9:
+            return "%d%s+%d" % (octave, _notes3[ps], cents)
+        else:
+            return "%d%s+0%d" % (octave, _notes3[ps], cents)
+
+cpdef f2n (double freq):
+    """
+    convert frequency to note string
+    """
+    return m2n(f2m(freq))
+
+cpdef n2f(str note):
+    """
+    convert note string to frequency ('A4' = 442.0)
+    """
+    if " " in note:
+        return [m2f(n) for n in n2m(note)]
+    else:
+        return m2f(n2m(note))
+
+cdef int get_octave(str note):
+    cdef int octave
+    try:
+        octave = int(note[0])
+    except ValueError:
+        try:
+            octave = int(note[-1])
+        except ValueError:
+            octave = OCTAVE_NOT_FOUND
+    return octave
+
+def complete_octaves(notes):
+    cdef int current_octave = 4 # default octave: 
+    cdef int octave
+    cdef list new_notes = []
+    for note in notes:
+        octave = get_octave(note)
+        if octave != OCTAVE_NOT_FOUND:
+            current_octave = octave
+            new_notes.append(note)
+        else:
+            new_notes.append(str(current_octave) + note)
+    return new_notes
+
+cpdef double n2m(str note):
+    """
+    note can be:
+        "4A" or "A4" 
+        "4a" or "a4" 
+        "c4 e g" or "4C E G" --> [60, 64, 67]
+        "C#", "Db"
+        "C4+" or "4C+" (C a 1/4 tone up)
+        "E4-" or "4E-" (E a 1/4 tone down)
+        "4C#+" -> C 3/4 tone up 
+        "4E-31" -> E 31 cents down
+        etc...
+
+    .......................................................
+    if " " in note:
+        notes = complete_octaves(note.split())
+        return [n2m(n) for n in notes]
+    #cdef char* out0
+    cdef int octave
+    cdef double micro
+    cdef int pc
+    cdef int alteration
+
+    out = note.split('+')
+    try:
+        micro = int(out[1]) / 100.
+    except ValueError:
+        micro = 0.5
+    except IndexError, TypeError:
+        # no +, negative?
+        out = note.split('-')
+        try:
+            micro = -int(out[1]) / 100.
+        except ValueError:
+            micro = -0.5
+        except IndexError, TypeError:
+            micro = 0.0
+    out0 = out[0]
+    try:
+        octave = int(out0[0])
+        pc = _notes2[out0[1]]
+        alteration = ord(out0[-1])
+    except ValueError:
+        octave = int(out0[-1])
+        pc = _notes2[out0[0]]
+        alteration = ord(out0[1])
+    if alteration == 35:   # the # character
+        pc += 1
+    elif alteration == 98 or alteration == 115: # 'b' or 's'
+        pc -= 1
+    if pc > 11:
+        pc = 0
+        octave += 1
+    elif pc < 0:
+        pc = 0
+        octave -= 1
+    return (octave + 1) * 12 + pc + micro
+    """
+    if " " in note:
+        notes = complete_octaves(note.split())
+        return [n2m(n) for n in notes]
+    cdef int octave
+    cdef double micro
+    cdef int pc
+    cdef int alteration
+
+    out = note.split('+')
+    try:
+        micro = int(out[1]) / 100.
+    except ValueError:
+        micro = 0.5
+    except IndexError, TypeError:
+        # no +, negative?
+        out = note.split('-')
+        try:
+            micro = -int(out[1]) / 100.
+        except ValueError:
+            micro = -0.5
+        except IndexError, TypeError:
+            micro = 0.0
+    out0 = out[0]
+    try:
+        octave = int(out0[0])
+        pc = _notes2[out0[1]]
+        alteration = ord(out0[-1])
+    except ValueError:
+        octave = int(out0[-1])
+        pc = _notes2[out0[0]]
+        alteration = ord(out0[1])
+    if alteration == 35:   # the # character
+        pc += 1
+    elif alteration == 98 or alteration == 115: # 'b' or 's'
+        pc -= 1
+    if pc > 11:
+        pc = 0
+        octave += 1
+    elif pc < 0:
+        pc = 0
+        octave -= 1
+    return (octave + 1) * 12 + pc + micro
+
+cpdef double db2amp(double dBvalue):
+    """ 
+    convert dB to amplitude (0, 1) 
+
+    pow(10.0, (0.05 * dBvalue))
+    """
+    return pow(10.0, (0.05 * dBvalue))
+
+cpdef double amp2db(double amplitude):
+    """ 
+    convert amp (0, 1) to dB 
+
+    20.0 * log10(amplitude)
+    """
+    return 20.0 * log10(amplitude)
+
+def a_amp2db(np.ndarray[np.float64_t, ndim=1] A, out=None):
+    """" 
+    the same as amp2dbd but takes a numpy array as argument
+    puts the result in out if given, creates a new array otherwise
+    """
+    cdef Py_ssize_t i
+    cdef np.ndarray[np.float64_t, ndim=1] cout
+    if out is None:
+        cout = np.empty_like(A) #EMPTY1D(A.shape[0])
+    else:
+        cout = out
+    for i in range(A.shape[0]):
+        cout[i] = 20.0 * log10( A[i] )
+    return cout
+    
+def a_db2amp(np.ndarray[np.float64_t, ndim=1] A, out=None):
+    """
+    the same as db2amp but takes a numpy array as argument
+    puts the result in out if given, creates a new array otherwise
+    """
+    cdef Py_ssize_t i
+    cdef np.ndarray[np.float64_t, ndim=1] cout
+    if out is None:
+        cout = np.empty_like(A) #EMPTY1D(A.shape[0])
+    else:
+        cout = out
+    for i in range(A.shape[0]):
+        cout[i] = pow(10.0, (0.05 * A[i])) 
+    return cout
+
+def a_f2m(np.ndarray[np.float64_t, ndim=1] A, out=None):
+    """
+    the same as f2m but takes a numpy array as argument
+    puts the result in out if given, creates a new array otherwise
+    """
+    cdef Py_ssize_t i
+    cdef np.ndarray[np.float64_t, ndim=1] cout
+    global _a4
+    cdef double a4 = _a4
+    cdef double freq, midi
+    if out is None:
+        cout = np.empty_like(A) #EMPTY1D(A.shape[0])
+    else:
+        cout = out
+    for i in range(A.shape[0]):
+        freq = A[i]
+        if freq < 8.2129616379875419:
+            midi = 0
+        else:
+            midi = 12 * (log(freq / a4) / loge_2)
+        cout[i] = midi
+    return cout
+
+def a_m2f(np.ndarray[np.float64_t, ndim=1] A, out=None):
+    """
+    the same as m2f but takes a numpy array as argument
+    puts the result in out if given, creates a new array otherwise
+    """
+    cdef Py_ssize_t i
+    cdef np.ndarray[np.float64_t, ndim=1] cout
+    global _a4
+    cdef double a4 = _a4
+    cdef double freq, midi
+    if out is None:
+        cout = np.empty_like(A) #EMPTY1D(A.shape[0])
+    else:
+        cout = out
+    for i in range(A.shape[0]):
+        midi = A[i]
+        if 0.0 <= midi:
+            freq = a4 * 2.0 ** ((midi - 69.0) / 12.0)
+        else:
+            freq = 0
+        cout[i] = freq
+    return cout
+    
