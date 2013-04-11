@@ -1,90 +1,59 @@
-"""
-peach, a successor of pitchtools
-"""
+import os, sys
+from distutils.core import setup
+from distutils.extension import Extension
+from Cython.Distutils import build_ext
 
-import os
-import sys
+# ----------------------------------------------
+# monkey-patch for parallel compilation
+# ----------------------------------------------
+def parallelCCompile(self, sources, output_dir=None, macros=None, include_dirs=None, debug=0, extra_preargs=None, extra_postargs=None, depends=None):
+    # those lines are copied from distutils.ccompiler.CCompiler directly
+    macros, objects, extra_postargs, pp_opts, build =  self._setup_compile(output_dir, macros, include_dirs, sources, depends, extra_postargs)
+    cc_args = self._get_cc_args(pp_opts, debug, extra_preargs)
+    # parallel code
+    N = 2 # <---------- number of parallel compilations
+    import multiprocessing.pool
+    def _single_compile(obj):
+        try: src, ext = build[obj]
+        except KeyError: return
+        self._compile(obj, src, ext, cc_args, extra_postargs, pp_opts)
+    # convert to list, imap is evaluated on-demand
+    list(multiprocessing.pool.ThreadPool(N).imap(_single_compile,objects))
+    return objects
+import distutils.ccompiler
+distutils.ccompiler.CCompiler.compile = parallelCCompile
 
-from numpy.distutils.core import setup, Extension
-from setuphelp import info_factory, NotFoundError
+# -----------------------------------------------------------------------------
+# Global
+# -----------------------------------------------------------------------------
 
-f = open('version.cfg')
-VERSION = f.readline().strip()
+# detect platform
+platform = os.uname()[0] if hasattr(os, 'uname') else 'Windows'
 
-def is_valid_version(s):
-    def is_valid_int(s):
-        try:
-            int(s)
-        except ValueError:
-            return False
-        return True
-    digits = s.split('.')
-    o = len(digits) == 3
-    o = all(is_valid_int(digit) for digit in digits) and o
-    return o
+# get numpy include directory
+try:
+    import numpy
+    try:
+        numpy_include = numpy.get_include()
+    except AttributeError:
+        numpy_include = numpy.get_numpy_include()
+except ImportError:
+    print 'Error: Numpy was not found.'
+    sys.exit(1)
 
-assert is_valid_version(VERSION)
-print "version = ", VERSION
+include_dirs = ['peach', numpy_include]
+compile_args = ["-march=i686"]
 
-descr    = __doc__.split('\n')[1:-1]; del descr[1:3]
+peach_ext = Extension(
+    '_peach',
+    sources = ['peach/_peach.pyx'],
+    include_dirs = include_dirs,
+    extra_compile_args = compile_args
+)   
 
-classifiers = """
-Development Status :: 2 - Pre-Alpha
-Intended Audience :: Science/Research
-License :: OSI Approved :: BSD License
-Operating System :: MacOS
-Operating System :: POSIX
-Operating System :: Unix
-Programming Language :: C
-Programming Language :: Cython
-Programming Language :: Python
-Programming Language :: Python :: 2
-Topic :: Scientific/Engineering
-Topic :: Software Development :: Libraries :: Python Modules
-"""
-
-keywords = """
-scientific computing
-music
-"""
-
-platforms = """
-Linux
-Mac OS X
-"""
-
-
-metadata = {
-    'name'             : 'peach',
-    'version'          : VERSION,
-    'description'      : descr.pop(0),
-    'long_description' : '\n'.join(descr),
-    'url'              : '',
-    'download_url'     : '', 
-    'author'           : '',
-    'author_email'     : '',
-    'maintainer'       : '',
-    'maintainer_email' : '',
-    'classifiers'      : [c for c in classifiers.split('\n') if c],
-    'keywords'         : [k for k in keywords.split('\n')    if k],
-    'platforms'        : [p for p in platforms.split('\n')   if p],
-    }
-
-
-
-def configuration(parent_package='',top_path=None):
-    from numpy.distutils.misc_util import Configuration
-    confgr = Configuration('peach',parent_package,top_path)
-    confgr.add_extension('_peach', ['_peach.c']) # , extra_info=sf_config)
-    return confgr
-
-def cython_setup(annotate=False):
-    annotate = "-a" if annotate else ""
-    os.system("cython %s _peach.pyx" % annotate)
-
-if __name__ == "__main__":
-    cython_setup()
-    from numpy.distutils.core import setup as numpy_setup
-    config = configuration(top_path='').todict()
-    config.update(metadata)
-    numpy_setup(**config)
+setup(
+    name = 'peach',
+    ext_modules = [peach_ext],
+    cmdclass = {'build_ext':build_ext},
+    packages = ['peach']
+)
