@@ -1,25 +1,11 @@
 #cython: embedsignature=True
-import  numpy as np
-cimport numpy as np
-
 cdef extern from "math.h":
     cdef double log(double n)
     cdef double log10(double n)
     cdef double fmod(double a, double b)
     cdef double modf(double x, double *integer)
     cdef double pow(double x, double y)
-    
-cdef extern from "numpy/arrayobject.h":
-    PyArray_EMPTY(int nd, np.npy_intp* dims, int typenum, int fortran)
-    
-cdef inline np.ndarray EMPTY1D(int size): #new_empty_doublearray_1D(int size):
-    cdef np.npy_intp dims[1]
-    dims[0] = size
-    return PyArray_EMPTY(1, dims, DTYPE_TYPENUM, 0)
-
-DTYPE = np.float
-DTYPE_TYPENUM = np.NPY_DOUBLE
-
+        
 cdef dict _notes2 = {
     "C":0,
     "c":0,
@@ -83,7 +69,7 @@ def set_reference_freq(double a4=442.0):
     global _a4
     _a4 = a4
     
-def set_central_octave(int oct=4):
+def set_central_octave(int octave=4):
     """
     define which is the central octave taken as reference
     
@@ -91,7 +77,7 @@ def set_central_octave(int oct=4):
     if oct = 3 then C3 = 60
     """
     global _central_octave
-    _central_octave = oct
+    _central_octave = octave
     
 cpdef m2n(double midi):
     """
@@ -281,80 +267,4 @@ cpdef double amp2db(double amplitude):
     20.0 * log10(amplitude)
     """
     return 20.0 * log10(amplitude)
-
-def a_amp2db(np.ndarray[np.float64_t, ndim=1] A, out=None):
-    """" 
-    the same as amp2dbd but takes a numpy array as argument
-    puts the result in out if given, creates a new array otherwise
-    """
-    cdef Py_ssize_t i
-    cdef np.ndarray[np.float64_t, ndim=1] cout
-    if out is None:
-        cout = np.empty_like(A) #EMPTY1D(A.shape[0])
-    else:
-        cout = out
-    for i in range(A.shape[0]):
-        cout[i] = 20.0 * log10( A[i] )
-    return cout
-    
-def a_db2amp(np.ndarray[np.float64_t, ndim=1] A, out=None):
-    """
-    the same as db2amp but takes a numpy array as argument
-    puts the result in out if given, creates a new array otherwise
-    """
-    cdef Py_ssize_t i
-    cdef np.ndarray[np.float64_t, ndim=1] cout
-    if out is None:
-        cout = np.empty_like(A) #EMPTY1D(A.shape[0])
-    else:
-        cout = out
-    for i in range(A.shape[0]):
-        cout[i] = pow(10.0, (0.05 * A[i])) 
-    return cout
-
-def a_f2m(np.ndarray[np.float64_t, ndim=1] A, out=None):
-    """
-    the same as f2m but takes a numpy array as argument
-    puts the result in out if given, creates a new array otherwise
-    """
-    cdef Py_ssize_t i
-    cdef np.ndarray[np.float64_t, ndim=1] cout
-    global _a4
-    cdef double a4 = _a4
-    cdef double freq, midi
-    if out is None:
-        cout = np.empty_like(A) #EMPTY1D(A.shape[0])
-    else:
-        cout = out
-    for i in range(A.shape[0]):
-        freq = A[i]
-        if freq < 8.2129616379875419:
-            midi = 0
-        else:
-            midi = 12 * (log(freq / a4) / loge_2)
-        cout[i] = midi
-    return cout
-
-def a_m2f(np.ndarray[np.float64_t, ndim=1] A, out=None):
-    """
-    the same as m2f but takes a numpy array as argument
-    puts the result in out if given, creates a new array otherwise
-    """
-    cdef Py_ssize_t i
-    cdef np.ndarray[np.float64_t, ndim=1] cout
-    global _a4
-    cdef double a4 = _a4
-    cdef double freq, midi
-    if out is None:
-        cout = np.empty_like(A) #EMPTY1D(A.shape[0])
-    else:
-        cout = out
-    for i in range(A.shape[0]):
-        midi = A[i]
-        if 0.0 <= midi:
-            freq = a4 * 2.0 ** ((midi - 69.0) / 12.0)
-        else:
-            freq = 0
-        cout[i] = freq
-    return cout
     
