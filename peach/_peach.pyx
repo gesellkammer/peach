@@ -5,7 +5,7 @@ cdef extern from "math.h":
     cdef double fmod(double a, double b)
     cdef double modf(double x, double *integer)
     cdef double pow(double x, double y)
-        
+
 cdef dict _notes2 = {
     "C":0,
     "c":0,
@@ -267,4 +267,3 @@ cpdef double amp2db(double amplitude):
     20.0 * log10(amplitude)
     """
     return 20.0 * log10(amplitude)
-    
