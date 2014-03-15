@@ -30,19 +30,25 @@ distutils.ccompiler.CCompiler.compile = parallelCCompile
 # detect platform
 platform = os.uname()[0] if hasattr(os, 'uname') else 'Windows'
 
-# get numpy include directory
-try:
-    import numpy
-    try:
-        numpy_include = numpy.get_include()
-    except AttributeError:
-        numpy_include = numpy.get_numpy_include()
-except ImportError:
-    print 'Error: Numpy was not found.'
-    sys.exit(1)
+USE_NUMPY = False  # we don't need numpy anymore. leave this here as documentation, how to include numpy
 
-include_dirs = ['peach', numpy_include]
-compile_args = ["-march=i686"]
+# get numpy include directory
+if USE_NUMPY:
+    try:
+        import numpy
+        try:
+            numpy_include = numpy.get_include()
+        except AttributeError:
+            numpy_include = numpy.get_numpy_include()
+    except ImportError:
+        print 'Error: Numpy was not found.'
+        sys.exit(1)
+
+include_dirs = ['peach']
+compile_args = []
+
+if platform == 'Windows':
+    compile_args.append("-march=i686")
 
 peach_ext = Extension(
     '_peach',
