@@ -33,15 +33,19 @@ def _show_note_as_pdf(note):
     _open_pdf(os.path.splitext(ly)[0] + '.pdf')
     return out
     
-def show_note(n, backend='finale'):
+def show_note(n, backend=None):
     """
     n can be a midi number or a note name
+
+    backend: None -> use default backend
     """
     if isinstance(n, (int, float)):
         note = m2n(n)
     else:
         note = n
     DEFAULT = 'finale'
+    if backend is None:
+        backend = DEFAULT
     func = {
         'finale':_show_note_in_finale,
         'pdf':_show_note_as_pdf,
@@ -57,29 +61,7 @@ def pianokey2midi(key_number):
     """
     assert 0 <= key_number <= 87
     return key_number + 21
-    
-def notestr_to_notes(s):
-    """
-    s: a string containing any note in the format accepted to n2m or n2f
-    notes can be separated by ',' or by a blank space
-    
-    ranges can also be used and they include both extremes: (C4 - F4)
-    """
-    import re
-    ranges_pattern = '\(.*? -.*?\)'
-    exclude = []
-    def range2notes(r):
-        words = r.strip('()').split()
-        note0, note1 = words[0], words[-1]
-        note1 = note1.lstrip('-')
-        note0, note1 = n2m(note0), n2m(note1)
-
-        
-    for match in re.finditer(ranges_pattern, s):
-        r = match.group()
-        notes = range2notes(r)
-        exclude.append(match.span())
-        
+         
 def normalize_notename(n):
     """
     given a notename in the format returned by m2n, transform it to 
