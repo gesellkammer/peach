@@ -118,16 +118,13 @@ cpdef f2n (double freq):
     """
     return m2n(f2m(freq))
 
-cpdef n2f(str note):
+cpdef n2f(note):
     """
     convert note string to frequency ('A4' = 442.0)
     """
-    if " " in note:
-        return [m2f(n) for n in n2m(note)]
-    else:
-        return m2f(n2m(note))
+    return m2f(n2m(note))
 
-cdef int get_octave(str note):
+cdef int get_octave(note):
     cdef int octave
     try:
         octave = int(note[0])
@@ -151,7 +148,7 @@ def complete_octaves(notes):
             new_notes.append(str(current_octave) + note)
     return new_notes
 
-cpdef double n2m(str note):
+cpdef double n2m(note):
     """
     note can be:
         "4A" or "A4" 
@@ -164,54 +161,8 @@ cpdef double n2m(str note):
         "4E-31" -> E 31 cents down
         etc...
 
-    .......................................................
-    if " " in note:
-        notes = complete_octaves(note.split())
-        return [n2m(n) for n in notes]
-    #cdef char* out0
-    cdef int octave
-    cdef double micro
-    cdef int pc
-    cdef int alteration
-
-    out = note.split('+')
-    try:
-        micro = int(out[1]) / 100.
-    except ValueError:
-        micro = 0.5
-    except IndexError, TypeError:
-        # no +, negative?
-        out = note.split('-')
-        try:
-            micro = -int(out[1]) / 100.
-        except ValueError:
-            micro = -0.5
-        except IndexError, TypeError:
-            micro = 0.0
-    out0 = out[0]
-    try:
-        octave = int(out0[0])
-        pc = _notes2[out0[1]]
-        alteration = ord(out0[-1])
-    except ValueError:
-        octave = int(out0[-1])
-        pc = _notes2[out0[0]]
-        alteration = ord(out0[1])
-    if alteration == 35:   # the # character
-        pc += 1
-    elif alteration == 98 or alteration == 115: # 'b' or 's'
-        pc -= 1
-    if pc > 11:
-        pc = 0
-        octave += 1
-    elif pc < 0:
-        pc = 0
-        octave -= 1
-    return (octave + 1) * 12 + pc + micro
+    
     """
-    if " " in note:
-        notes = complete_octaves(note.split())
-        return [n2m(n) for n in notes]
     cdef int octave
     cdef double micro
     cdef int pc
