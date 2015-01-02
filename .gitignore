@@ -1,0 +1,5 @@
+*.c
+.SyncIgnore
+build
+*.pyc
+*pycache*

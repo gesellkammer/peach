@@ -7,6 +7,7 @@ Created by edu on 2010-11-10.
 """
 from _peach import *
 import os
+import six as _six
 
 def _note_to_music21(note):
     return n2m(note)
@@ -83,4 +84,34 @@ def normalize_notename(n):
         octave = str(int(n[0:2]))
         n = n[2:] + octave
     return n
+
+def _asmidi(n):
+    if isinstance(n, _six.string_types):
+        return n2m(n)
+    return n
+
+def _frange(start, stop=None, step=None):
+    """Like xrange(), but returns list of floats instead
+    All numbers are generated on-demand using generators
+    """
+    if stop is None:
+        stop = float(start)
+        start = 0.0
+    if step is None:
+        step = 1.0
+    cur = float(start)
+    numiter = int((stop - start) / step)
+    for i in _six.moves.xrange(numiter):
+        yield start + step*i
+
+def midirange(n1, n2, step=1, include_last=False):
+    """Returns the midinotes between n1 and n2
+    n1, n2: a midinote or a notename as a string
+    """
+    n1 = _asmidi(n1)
+    n2 = _asmidi(n2)
+    if include_last:
+        n2 += step
+    midinotes = list(_frange(n1, n2, step))
+    return midinotes
     

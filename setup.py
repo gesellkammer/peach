@@ -22,5 +22,6 @@ setup(
     name = 'peach',
     ext_modules = [peach_ext],
     cmdclass = {'build_ext':build_ext},
-    packages = ['peach']
+    packages = ['peach'],
+    description = "Fast pitch (midi, hertz) convertion routinges"
 )

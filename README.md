@@ -10,6 +10,7 @@ Dependencies
 
 * cython >= 0.12
 * python >= 2.5 (python3 >= 3.3)
+* six
 
 You should of course have a c compiler installed.
 
